@@ -5,42 +5,211 @@
   <title>KokoroJS TTS</title>
   <style>
     body {
-      width: 350px;
+      width: 400px;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      margin: 0;
     }
     h1 {
       font-size: 18px;
       margin: 0 0 16px 0;
     }
-    .status {
-      padding: 8px;
+    .model-status {
+      padding: 8px 12px;
       background: #f0f0f0;
       border-radius: 4px;
       margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .model-status .indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .model-status .indicator.not-downloaded {
+      background: #dc3545;
+    }
+    .model-status .indicator.downloading {
+      background: #ffc107;
+    }
+    .model-status .indicator.ready {
+      background: #28a745;
+    }
+    .progress-container {
+      display: none;
+      margin-bottom: 12px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background: #e9ecef;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #007bff;
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .input-group {
+      margin-bottom: 12px;
+    }
+    .input-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #333;
+    }
+    textarea {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 13px;
+      resize: vertical;
+      min-height: 80px;
+      box-sizing: border-box;
+    }
+    select, input[type="range"] {
+      width: 100%;
+      padding: 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+    input[type="range"] {
+      padding: 0;
+      border: none;
+    }
+    .range-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #666;
+      margin-top: 2px;
+    }
+    .button-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
     }
     button {
-      padding: 8px 16px;
-      margin: 4px;
+      flex: 1;
+      padding: 10px 16px;
       border: none;
       border-radius: 4px;
       background: #007bff;
       color: white;
       cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.2s;
     }
-    button:hover {
+    button:hover:not(:disabled) {
       background: #0056b3;
+    }
+    button:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    button.secondary {
+      background: #6c757d;
+    }
+    button.secondary:hover:not(:disabled) {
+      background: #545b62;
+    }
+    button.danger {
+      background: #dc3545;
+    }
+    button.danger:hover:not(:disabled) {
+      background: #c82333;
+    }
+    .status-message {
+      padding: 6px 8px;
+      background: #e7f3ff;
+      border-left: 3px solid #007bff;
+      border-radius: 3px;
+      font-size: 12px;
+      margin-top: 12px;
+      display: none;
+    }
+    .status-message.error {
+      background: #ffe7e7;
+      border-left-color: #dc3545;
+    }
+    .status-message.success {
+      background: #e7ffe7;
+      border-left-color: #28a745;
     }
   </style>
 </head>
 <body>
   <h1>KokoroJS TTS</h1>
-  <div class="status" id="status">Ready</div>
-  <div>
-    <button id="readSelection">Read Selection</button>
-    <button id="stop">Stop</button>
-    <button id="options">Options</button>
+
+  <div class="model-status">
+    <span class="indicator not-downloaded" id="modelIndicator"></span>
+    <span id="modelStatusText">Model not downloaded</span>
   </div>
+
+  <div class="progress-container" id="progressContainer">
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill">0%</div>
+    </div>
+  </div>
+
+  <div class="input-group">
+    <label for="textInput">Text to speak:</label>
+    <textarea id="textInput" placeholder="Enter text here...">Hello, this is a test of the Kokoro TTS engine.</textarea>
+  </div>
+
+  <div class="input-group">
+    <label for="voiceSelect">Voice:</label>
+    <select id="voiceSelect">
+      <option value="af_bella">Bella (Female, US)</option>
+      <option value="af_sarah">Sarah (Female, US)</option>
+      <option value="am_adam">Adam (Male, US)</option>
+      <option value="am_michael">Michael (Male, US)</option>
+      <option value="bf_emma">Emma (Female, UK)</option>
+      <option value="bf_isabella">Isabella (Female, UK)</option>
+    </select>
+  </div>
+
+  <div class="input-group">
+    <label for="speedControl">Speed: <span id="speedValue">1.0</span>x</label>
+    <input type="range" id="speedControl" min="0.5" max="3.0" step="0.1" value="1.0">
+    <div class="range-labels">
+      <span>0.5x</span>
+      <span>3.0x</span>
+    </div>
+  </div>
+
+  <div class="button-group">
+    <button id="speakBtn">Speak</button>
+    <button id="stopBtn" class="danger">Stop</button>
+  </div>
+
+  <div class="button-group">
+    <button id="readSelection" class="secondary">Read Selection</button>
+    <button id="optionsBtn" class="secondary">Options</button>
+  </div>
+
+  <div class="status-message" id="statusMessage"></div>
+
   <script src="popup.js"></script>
 </body>
 </html>

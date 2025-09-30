@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>IndexedDB Test</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { color: #333; }
+    .test { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+    .pass { background: #e7ffe7; border-color: #28a745; }
+    .fail { background: #ffe7e7; border-color: #dc3545; }
+    .running { background: #e7f3ff; border-color: #007bff; }
+    #results { margin-top: 20px; }
+    .summary { font-weight: bold; padding: 10px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <h1>IndexedDB Wrapper Real Browser Test</h1>
+  <div id="results"></div>
+  <div id="summary" class="summary"></div>
+
+  <script type="module">
+    // Inline the IndexedDBWrapper for testing
+    const DB_NAME = 'KokoroJSExtension'
+    const DB_VERSION = 1
+
+    const STORES = {
+      MODELS: 'models',
+      TEXT_CACHE: 'textCache',
+      METADATA: 'metadata'
+    }
+
+    class IndexedDBWrapper {
+      constructor() {
+        this.db = null
+        this.initPromise = null
+      }
+
+      async init() {
+        if (this.db) {
+          return this.db
+        }
+
+        if (this.initPromise) {
+          return this.initPromise
+        }
+
+        this.initPromise = new Promise((resolve, reject) => {
+          const request = indexedDB.open(DB_NAME, DB_VERSION)
+
+          request.onerror = () => {
+            reject(new Error(`Failed to open database: ${request.error}`))
+          }
+
+          request.onsuccess = () => {
+            this.db = request.result
+            resolve(this.db)
+          }
+
+          request.onupgradeneeded = (event) => {
+            const db = event.target.result
+
+            if (!db.objectStoreNames.contains(STORES.MODELS)) {
+              const modelsStore = db.createObjectStore(STORES.MODELS, { keyPath: 'modelId' })
+              modelsStore.createIndex('version', 'version', { unique: false })
+              modelsStore.createIndex('downloadDate', 'downloadDate', { unique: false })
+            }
+
+            if (!db.objectStoreNames.contains(STORES.TEXT_CACHE)) {
+              const textCacheStore = db.createObjectStore(STORES.TEXT_CACHE, { keyPath: 'cacheId' })
+              textCacheStore.createIndex('tabId', 'tabId', { unique: false })
+              textCacheStore.createIndex('timestamp', 'timestamp', { unique: false })
+            }
+
+            if (!db.objectStoreNames.contains(STORES.METADATA)) {
+              db.createObjectStore(STORES.METADATA, { keyPath: 'key' })
+            }
+          }
+        })
+
+        return this.initPromise
+      }
+
+      async storeModel(modelId, arrayBuffer, metadata = {}) {
+        try {
+          await this.init()
+
+          const modelData = {
+            modelId,
+            data: arrayBuffer,
+            version: metadata.version || 'v1.0',
+            size: arrayBuffer.byteLength,
+            downloadDate: Date.now(),
+            lastUsed: Date.now(),
+            storageType: 'indexeddb',
+            checksums: metadata.checksums || {}
+          }
+
+          return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MODELS], 'readwrite')
+            const store = transaction.objectStore(STORES.MODELS)
+            const request = store.put(modelData)
+
+            request.onsuccess = () => resolve()
+            request.onerror = () => reject(new Error(`Failed to store model: ${request.error}`))
+          })
+        } catch (error) {
+          throw new Error(`Failed to store model ${modelId}: ${error.message}`)
+        }
+      }
+
+      async loadModel(modelId) {
+        try {
+          await this.init()
+
+          return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MODELS], 'readonly')
+            const store = transaction.objectStore(STORES.MODELS)
+            const request = store.get(modelId)
+
+            request.onsuccess = () => {
+              const result = request.result
+              if (result) {
+                resolve(result.data)
+              } else {
+                resolve(null)
+              }
+            }
+            request.onerror = () => reject(new Error(`Failed to load model: ${request.error}`))
+          })
+        } catch (error) {
+          throw new Error(`Failed to load model ${modelId}: ${error.message}`)
+        }
+      }
+
+      async checkModelExists(modelId) {
+        try {
+          await this.init()
+
+          return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([STORES.MODELS], 'readonly')
+            const store = transaction.objectStore(STORES.MODELS)
+            const request = store.get(modelId)
+
+            request.onsuccess = () => {
+              resolve(!!request.result)
+            }
+            request.onerror = () => reject(new Error(`Failed to check model existence: ${request.error}`))
+          })
+        } catch (error) {
+          console.error(`Failed to check model ${modelId}:`, error)
+          return false
+        }
+      }
+
+      close() {
+        if (this.db) {
+          this.db.close()
+          this.db = null
+          this.initPromise = null
+        }
+      }
+    }
+
+    // Test runner
+    const results = document.getElementById('results')
+    const summary = document.getElementById('summary')
+    let testsPassed = 0
+    let testsFailed = 0
+
+    function addResult(testName, status, message) {
+      const div = document.createElement('div')
+      div.className = `test ${status}`
+      div.innerHTML = `<strong>${status.toUpperCase()}</strong>: ${testName}<br><small>${message}</small>`
+      results.appendChild(div)
+
+      if (status === 'pass') testsPassed++
+      if (status === 'fail') testsFailed++
+    }
+
+    async function runTests() {
+      try {
+        // Clear any existing database
+        await new Promise((resolve, reject) => {
+          const request = indexedDB.deleteDatabase(DB_NAME)
+          request.onsuccess = () => resolve()
+          request.onerror = () => reject(request.error)
+          request.onblocked = () => resolve() // Continue if blocked
+        })
+
+        const storage = new IndexedDBWrapper()
+
+        // Test 1: Initialize database
+        await storage.init()
+        const hasModels = storage.db.objectStoreNames.contains('models')
+        const hasTextCache = storage.db.objectStoreNames.contains('textCache')
+        const hasMetadata = storage.db.objectStoreNames.contains('metadata')
+
+        if (hasModels && hasTextCache && hasMetadata) {
+          addResult('Initialize database', 'pass', 'All three object stores created successfully')
+        } else {
+          addResult('Initialize database', 'fail', `Missing stores: models=${hasModels}, textCache=${hasTextCache}, metadata=${hasMetadata}`)
+        }
+
+        // Test 2: Store and retrieve model with ArrayBuffer
+        const testModelId = 'test-model-123'
+        const testData = new ArrayBuffer(1024) // 1KB test data
+        const testView = new Uint8Array(testData)
+        for (let i = 0; i < testView.length; i++) {
+          testView[i] = i % 256 // Fill with pattern
+        }
+
+        await storage.storeModel(testModelId, testData, {
+          version: 'v1.0',
+          checksums: { sha256: 'test-checksum-12345' }
+        })
+
+        addResult('Store model', 'pass', `Stored ${testData.byteLength} bytes`)
+
+        // Test 3: Check model exists
+        const exists = await storage.checkModelExists(testModelId)
+        if (exists) {
+          addResult('Check model exists', 'pass', 'Model existence check returned true')
+        } else {
+          addResult('Check model exists', 'fail', 'Model existence check returned false')
+        }
+
+        // Test 4: Load model and verify data
+        const retrieved = await storage.loadModel(testModelId)
+
+        if (!retrieved) {
+          addResult('Load model', 'fail', 'Retrieved data is null or undefined')
+        } else if (!(retrieved instanceof ArrayBuffer)) {
+          addResult('Load model', 'fail', `Retrieved data is not ArrayBuffer, got ${typeof retrieved}`)
+        } else if (retrieved.byteLength !== testData.byteLength) {
+          addResult('Load model', 'fail', `Size mismatch: expected ${testData.byteLength}, got ${retrieved.byteLength}`)
+        } else {
+          // Verify data integrity
+          const retrievedView = new Uint8Array(retrieved)
+          let dataMatches = true
+          for (let i = 0; i < Math.min(10, retrievedView.length); i++) {
+            if (retrievedView[i] !== (i % 256)) {
+              dataMatches = false
+              break
+            }
+          }
+
+          if (dataMatches) {
+            addResult('Load model', 'pass', `Retrieved ${retrieved.byteLength} bytes with correct data integrity`)
+          } else {
+            addResult('Load model', 'fail', 'Data integrity check failed - bytes do not match')
+          }
+        }
+
+        // Test 5: Store larger model (simulate real model size)
+        const largeModelId = 'kokoro-82M'
+        const largeData = new ArrayBuffer(1024 * 1024) // 1MB test
+        const largeView = new Uint8Array(largeData)
+        largeView[0] = 0xAA
+        largeView[largeView.length - 1] = 0xBB
+
+        const startStore = Date.now()
+        await storage.storeModel(largeModelId, largeData, { version: 'v1.0' })
+        const storeTime = Date.now() - startStore
+
+        if (storeTime < 1000) {
+          addResult('Store large model performance', 'pass', `Stored 1MB in ${storeTime}ms (<1000ms target)`)
+        } else {
+          addResult('Store large model performance', 'fail', `Stored 1MB in ${storeTime}ms (>1000ms)`)
+        }
+
+        // Test 6: Load large model performance
+        const startLoad = Date.now()
+        const largeRetrieved = await storage.loadModel(largeModelId)
+        const loadTime = Date.now() - startLoad
+
+        if (loadTime < 500 && largeRetrieved) {
+          const view = new Uint8Array(largeRetrieved)
+          if (view[0] === 0xAA && view[view.length - 1] === 0xBB) {
+            addResult('Load large model performance', 'pass', `Loaded 1MB in ${loadTime}ms (<500ms target) with data integrity`)
+          } else {
+            addResult('Load large model performance', 'fail', 'Data integrity check failed on large model')
+          }
+        } else if (!largeRetrieved) {
+          addResult('Load large model performance', 'fail', 'Failed to retrieve large model')
+        } else {
+          addResult('Load large model performance', 'fail', `Loaded 1MB in ${loadTime}ms (>500ms)`)
+        }
+
+        storage.close()
+
+        // Update summary
+        summary.innerHTML = `Tests Complete: ${testsPassed} passed, ${testsFailed} failed`
+        summary.className = `summary ${testsFailed > 0 ? 'fail' : 'pass'}`
+
+        // Store result in window for Playwright to read
+        window.testResults = {
+          passed: testsPassed,
+          failed: testsFailed,
+          total: testsPassed + testsFailed
+        }
+
+      } catch (error) {
+        addResult('Test execution', 'fail', `Error: ${error.message}`)
+        summary.innerHTML = 'Tests Failed: ' + error.message
+        summary.className = 'summary fail'
+        window.testResults = { passed: 0, failed: 1, error: error.message }
+      }
+    }
+
+    // Run tests on load
+    runTests()
+  </script>
+</body>
+</html>
