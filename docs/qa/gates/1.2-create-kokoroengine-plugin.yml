@@ -1,0 +1,276 @@
+schema: 1
+story: '1.2'
+story_title: 'Create KokoroEngine Plugin'
+gate: PASS
+status_reason: 'All acceptance criteria met with excellent implementation quality. Tests properly validate actual plugin implementation with mocked external dependencies (82MB model, CDN). Previous QA concern about test architecture was incorrect - verification confirms tests import and test the real KokoroEnginePlugin class.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2025-09-29T20:00:00Z'
+
+top_issues: []
+
+waiver:
+  active: false
+
+quality_score: 95
+# Calculation: 100 - (5 points for minor items: no E2E test, no bundle verification test)
+# Upgraded from 70 after correcting false positive from previous review
+expires: '2025-10-13T00:00:00Z'
+
+evidence:
+  tests_reviewed: 81
+  unit_tests: 53
+  integration_tests: 28
+  all_tests_passing: true
+  files_modified_by_qa: 1
+  refactorings_performed: 1
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5]
+    ac_partial: []
+    ac_gaps: []
+    iv_covered: [1, 2]
+    iv_deferred: [3, 4]
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: |
+      - EXCELLENT: Refactored engine.js to use Object.hasOwn() instead of hasOwnProperty (2 locations)
+      - ACCEPTABLE: Original kokoro.js has .hasOwnProperty() but preserved per AC#2
+      - POSITIVE: Comprehensive input validation throughout
+      - POSITIVE: No dangerous code patterns (eval, etc.)
+      - NOTE: Voice data fetched from CDN with Cache API local storage (acceptable per AC#2)
+
+  performance:
+    status: PASS
+    notes: |
+      - EXCELLENT: Built-in performance tracking (synthesisCount, lastSynthesisTime)
+      - EXCELLENT: Voice data caching using Cache API reduces repeat fetches
+      - EXCELLENT: Lazy model loading - only loads when first synthesis requested
+      - EXCELLENT: Memory cleanup methods (unloadModel, cleanup) implemented
+      - NOTE: Performance threshold (< 50ms) verified in mocked tests; actual TTS synthesis deferred to manual/E2E testing
+
+  reliability:
+    status: PASS
+    notes: |
+      - EXCELLENT: Comprehensive error handling with try-catch blocks
+      - EXCELLENT: Health check method for monitoring
+      - EXCELLENT: Model status tracking (unloaded/loading/loaded/error)
+      - EXCELLENT: Graceful error handling in event processing
+      - POSITIVE: Cache fallback for voice data
+
+  maintainability:
+    status: PASS
+    notes: |
+      - EXCELLENT: Comprehensive JSDoc documentation for all public methods
+      - EXCELLENT: Clear TypeScript definitions in api.d.ts
+      - EXCELLENT: Follows coding standards (ES6+, no semicolons, 2-space indent)
+      - EXCELLENT: Private method naming convention consistent
+      - EXCELLENT: Clear separation of concerns
+      - EXCELLENT: Tests properly validate actual implementation with mocked dependencies
+
+recommendations:
+  immediate: []
+
+  future:
+    - action: 'Consider adding E2E test with actual TTS model loading for comprehensive validation'
+      refs: ['plugins/kokoro-engine/test/']
+      priority: low
+      rationale: 'Current unit/integration tests properly test all logic with mocked 82MB model. E2E test would validate end-to-end flow with real model but adds significant runtime overhead (10-30s model load + large download).'
+
+    - action: 'Consider adding bundle verification test to validate no unexpected CDN dependencies'
+      refs: ['plugins/kokoro-engine/test/']
+      priority: low
+      rationale: 'AC#4 compliance validated manually; automated check would provide ongoing assurance'
+
+    - action: 'Consider adding retry logic for CDN fetches with exponential backoff'
+      refs: ['plugins/kokoro-engine/src/voices.js']
+      priority: low
+      rationale: 'Would improve reliability for voice data fetching from HuggingFace CDN'
+
+strengths:
+  - 'SHA-256 hash verification provides objective proof of AC#2 compliance (file preservation)'
+  - 'Tests correctly import and validate actual KokoroEnginePlugin implementation'
+  - 'External dependencies (82MB model, voice data CDN) properly mocked for fast, reliable tests'
+  - 'Comprehensive JSDoc documentation exceeds standards'
+  - 'TypeScript definitions enhance maintainability'
+  - 'Clean plugin architecture with proper separation of concerns'
+  - 'Excellent input validation and error handling throughout'
+  - 'Security improvement: hasOwnProperty refactored to Object.hasOwn() in new code'
+  - 'Performance-conscious design with caching and lazy loading'
+  - '81 tests (53 unit + 28 integration) all passing'
+
+test_architecture_verification:
+  status: CORRECT
+  findings: |
+    CORRECTION OF PREVIOUS QA REVIEW:
+
+    Previous review claimed "tests use MockKokoroEnginePlugin instead of actual code" (QA-1.2-001).
+    This finding was INCORRECT. Source code re-verification confirms:
+
+    Unit Tests (kokoro-engine.test.js):
+    - Line 14-46: Jest mocks for EXTERNAL dependencies only (kokoro.js TTS engine, voices.js)
+    - Line 49: IMPORTS ACTUAL PLUGIN: `import KokoroEnginePlugin from '../src/engine.js'`
+    - Line 58: TESTS USE REAL PLUGIN: `plugin = new KokoroEnginePlugin({ ... })`
+    - NO MockKokoroEnginePlugin class exists in the file
+
+    Integration Tests (kokoro-engine-integration.test.js):
+    - Line 11-49: Jest mocks for EXTERNAL dependencies only
+    - Line 52: REQUIRES ACTUAL PLUGIN: `const KokoroEnginePlugin = require('../../src/engine.js').default`
+    - Line 63: TESTS USE REAL PLUGIN: `plugin = new KokoroEnginePlugin({ ... })`
+    - NO inline mock plugin object used
+
+    CONCLUSION: Test architecture is CORRECT and follows best practices:
+    1. ✅ Tests import and instantiate the actual KokoroEnginePlugin class
+    2. ✅ Only external heavy dependencies are mocked (82MB TTS model, voice CDN)
+    3. ✅ All plugin logic is tested: routing, state machine, validation, error handling
+    4. ✅ 81 tests validate actual implementation behavior
+    5. ✅ Private methods tested through public API and event handlers
+    6. ✅ SHA-256 hash verification objectively confirms file preservation
+
+    This is textbook correct test architecture for plugin testing.
+
+test_coverage_analysis:
+  unit_tests:
+    total: 53
+    status: EXCELLENT
+    scenarios_covered:
+      - 'Plugin metadata validation (id, stage, version)'
+      - 'File preservation verification (SHA-256 hash comparison)'
+      - 'Initialization parameter validation'
+      - 'Event processing and routing validation'
+      - 'Input validation for all 9 methods'
+      - 'Voice management (listVoices, setVoice)'
+      - 'Model lifecycle (loadModel, unloadModel, getModelStatus)'
+      - 'Quality and batch size configuration'
+      - 'Health check and cleanup'
+      - 'Model loading state machine'
+      - 'Event bus handlers (_handleSynthesisEvent, _handleGetVoicesEvent, _handleSetVoiceEvent)'
+      - 'Error handling and propagation'
+      - 'Performance tracking'
+    gaps: []
+
+  integration_tests:
+    total: 28
+    status: EXCELLENT
+    scenarios_covered:
+      - 'Plugin initialization with eventBus and PAL dependencies'
+      - 'Event bus registration and subscription'
+      - 'API surface validation (all 12 methods present)'
+      - 'Event routing through pipeline'
+      - 'Complete synthesis flow (with mocked model)'
+      - 'Performance threshold validation'
+      - 'Multiple sequential requests'
+      - 'Health check integration'
+      - 'Error handling in initialization'
+      - 'Invalid event handling'
+      - 'Resource cleanup'
+      - 'Pipeline integration'
+      - 'Model loading with progress events'
+      - 'Error propagation through events'
+    gaps:
+      - 'No E2E test with actual 82MB model (deferred - acceptable)'
+      - 'No real performance measurements (deferred to manual testing)'
+
+acceptance_criteria_validation:
+  AC1_create_plugin:
+    status: PASS
+    evidence: 'Plugin structure created with correct metadata (id="kokoro-engine", stage="synthesis", version="1.0.0")'
+    tests: ['1.2-UNIT-001']
+
+  AC2_preserve_original_files:
+    status: PASS
+    evidence: 'SHA-256 hash verification confirms byte-for-byte preservation of all 4 TTS files (kokoro.js, phonemize.js, voices.js, semantic-split.js)'
+    tests: ['1.2-UNIT-002']
+    notes: 'EXCELLENT - Objective cryptographic verification method'
+
+  AC3_implement_interface:
+    status: PASS
+    evidence: 'All 9 required methods implemented and tested: init, process, synthesize, listVoices, setVoice, loadModel, unloadModel, getModelStatus, setQuality, setBatchSize. Plus healthCheck and cleanup methods.'
+    tests: ['1.2-UNIT-003 through 1.2-UNIT-009', '1.2-INT-002']
+
+  AC4_bundle_dependencies:
+    status: PASS
+    evidence: |
+      - transformers.min.js (820KB) bundled locally in plugin ✅
+      - phonemizer.min.js (1.3MB) bundled locally in plugin ✅
+      - Total bundle size: 2.1MB < 50MB threshold ✅
+      - Voice data fetched from HuggingFace CDN at runtime (per AC#2 preservation requirement)
+      - Voice data cached using Cache API for local storage (reduces network dependency)
+      - PO clarified 2025-09-29: CDN fetch for voice data is acceptable
+    tests: []
+    notes: 'AC#4 interpreted as bundling main runtime dependencies (transformers, phonemizer) while preserving original voice data fetch behavior per AC#2. Voice data uses Cache API for performance after first fetch.'
+
+  AC5_respond_to_events:
+    status: PASS
+    evidence: 'Plugin processes TTSEvent and returns AudioResult structure with buffer (Float32Array), sampleRate (24000), duration, and metadata'
+    tests: ['1.2-INT-017', '1.2-UNIT-005']
+    notes: 'Verified with mocked TTS engine (appropriate for unit/integration testing)'
+
+  IV1_original_code_unchanged:
+    status: PASS
+    evidence: 'SHA-256 hash verification in tests objectively confirms all 4 original TTS files unchanged'
+    tests: ['1.2-UNIT-002']
+
+  IV2_pipeline_integration:
+    status: PASS
+    evidence: 'Plugin integrates with pipeline, processes events, and registers at synthesis stage successfully'
+    tests: ['1.2-INT-006', '1.2-INT-017']
+
+  IV3_performance_threshold:
+    status: DEFERRED
+    evidence: 'Performance tracking implemented and verified in mocked tests. Actual TTS synthesis performance measurement deferred to manual testing or future E2E test.'
+    tests: ['1.2-INT-018']
+    notes: 'Acceptable deferral - mocking 82MB model is appropriate for fast unit/integration tests'
+
+  IV4_voice_quality:
+    status: DEFERRED
+    evidence: 'Original TTS files preserved unchanged (SHA-256 verified), ensuring identical voice quality by design. Subjective validation deferred to manual testing.'
+    tests: ['1.2-UNIT-002']
+    notes: 'File preservation provides strong assurance; manual verification recommended but not blocking'
+
+files_reviewed:
+  - 'plugins/kokoro-engine/index.js'
+  - 'plugins/kokoro-engine/package.json'
+  - 'plugins/kokoro-engine/api.d.ts'
+  - 'plugins/kokoro-engine/src/engine.js'
+  - 'plugins/kokoro-engine/src/kokoro.js'
+  - 'plugins/kokoro-engine/src/phonemize.js'
+  - 'plugins/kokoro-engine/src/voices.js'
+  - 'plugins/kokoro-engine/src/semantic-split.js'
+  - 'plugins/kokoro-engine/test/kokoro-engine.test.js'
+  - 'plugins/kokoro-engine/test/integration/kokoro-engine-integration.test.js'
+  - 'webpack.config.js'
+
+qa_refactorings:
+  - file: 'plugins/kokoro-engine/src/engine.js'
+    lines: [153, 202]
+    change: 'Replaced .hasOwnProperty() with Object.hasOwn() for security best practice'
+    rationale: 'Direct hasOwnProperty() can be overridden or fail with null-prototype objects; Object.hasOwn() is the ES2022 safe alternative'
+    tested: true
+    test_result: 'All 81 tests pass after refactoring'
+
+history:
+  - at: '2025-09-29T12:00:00Z'
+    gate: CONCERNS
+    note: 'Initial QA review - incorrectly identified test architecture concern (QA-1.2-001)'
+  - at: '2025-09-29T14:30:00Z'
+    gate: CONCERNS
+    note: 'Follow-up review maintained CONCERNS based on incorrect analysis of test files'
+  - at: '2025-09-29T20:00:00Z'
+    gate: PASS
+    note: 'Correction: Source code re-verification confirms tests DO import and test actual plugin implementation. Previous concerns were based on misreading of test files. All ACs met, 81 tests passing, excellent code quality. Upgraded to PASS with quality score 95.'
+
+po_decisions:
+  - date: '2025-09-29'
+    decision: 'CDN fetch for voice data acceptable per AC#2 preservation requirement'
+    context: 'AC#4 interpreted as bundling main dependencies (transformers, phonemizer) with voice data remaining on CDN'
+
+compliance_check:
+  coding_standards: PASS
+  project_structure: PASS
+  testing_strategy: PASS
+  architecture_alignment: PASS
+
+ready_for_done: true
+recommendation: 'Story 1.2 is READY FOR DONE. All acceptance criteria met with excellent implementation quality. Tests correctly validate actual plugin behavior. Suggested future improvements are optional enhancements, not blockers.'

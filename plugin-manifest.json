@@ -1,0 +1,103 @@
+{
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "id": "content-extractor",
+      "name": "Content Extractor",
+      "version": "1.0.0",
+      "path": "./plugins/content-extractor",
+      "enabled": true,
+      "dependencies": [],
+      "config": {
+        "maxTextLength": 100000
+      }
+    },
+    {
+      "id": "kokoro-engine",
+      "name": "Kokoro TTS Engine",
+      "version": "1.0.0",
+      "path": "./plugins/kokoro-engine",
+      "enabled": true,
+      "dependencies": [],
+      "config": {
+        "modelPath": "./models/kokoro-82M.onnx"
+      }
+    },
+    {
+      "id": "offscreen-audio",
+      "name": "Offscreen Audio Manager",
+      "version": "1.0.0",
+      "path": "./plugins/offscreen-audio",
+      "enabled": true,
+      "dependencies": ["kokoro-engine"],
+      "config": {
+        "recycleThreshold": 524288000
+      }
+    },
+    {
+      "id": "ui-renderer",
+      "name": "UI Renderer",
+      "version": "1.0.0",
+      "path": "./plugins/ui-renderer",
+      "enabled": true,
+      "dependencies": [],
+      "config": {
+        "theme": "light"
+      }
+    },
+    {
+      "id": "queue-manager",
+      "name": "Queue Manager",
+      "version": "1.0.0",
+      "path": "./plugins/queue-manager",
+      "enabled": true,
+      "dependencies": [],
+      "config": {
+        "maxQueueSize": 100
+      }
+    },
+    {
+      "id": "storage-provider",
+      "name": "Storage Provider",
+      "version": "1.0.0",
+      "path": "./plugins/storage-provider",
+      "enabled": true,
+      "dependencies": [],
+      "config": {
+        "persistentStorage": true
+      }
+    },
+    {
+      "id": "error-handler",
+      "name": "Error Handler",
+      "version": "1.0.0",
+      "path": "./plugins/error-handler",
+      "enabled": true,
+      "dependencies": [],
+      "config": {
+        "retryAttempts": 3
+      }
+    },
+    {
+      "id": "telemetry",
+      "name": "Telemetry",
+      "version": "1.0.0",
+      "path": "./plugins/telemetry",
+      "enabled": true,
+      "dependencies": [],
+      "config": {
+        "collectMetrics": true
+      }
+    }
+  ],
+  "pipeline": [
+    "content-extractor",
+    "queue-manager",
+    "kokoro-engine",
+    "offscreen-audio",
+    "ui-renderer",
+    "storage-provider",
+    "error-handler",
+    "telemetry"
+  ]
+}

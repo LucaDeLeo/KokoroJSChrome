@@ -1,2 +1,4 @@
 .bmad-core/
 .claude/
+node_modules
+.opencode/

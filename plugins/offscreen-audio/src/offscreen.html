@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offscreen Audio Player</title>
+</head>
+<body>
+  <h1>Offscreen Audio Player</h1>
+  <p>This document runs in the offscreen context to handle audio playback.</p>
+
+  <script>
+    /**
+     * Offscreen Audio Player
+     * Handles audio playback in isolated offscreen context
+     */
+
+    const SAMPLE_RATE = 24000
+
+    // Audio state
+    let audioContext = null
+    let currentSource = null
+    let currentPlaybackId = null
+    let isPaused = false
+    let pausedAt = 0
+    let startOffset = 0
+
+    /**
+     * Initialize audio context
+     */
+    function initAudioContext() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)()
+        console.log('AudioContext initialized in offscreen document')
+      }
+    }
+
+    /**
+     * Reconstruct AudioBuffer from raw data
+     */
+    function reconstructAudioBuffer(audioData, sampleRate, numberOfChannels) {
+      if (!audioContext) {
+        initAudioContext()
+      }
+
+      const buffer = audioContext.createBuffer(
+        numberOfChannels,
+        audioData.length,
+        sampleRate
+      )
+
+      // Set channel data
+      buffer.getChannelData(0).set(audioData)
+
+      return buffer
+    }
+
+    /**
+     * Stop current playback
+     */
+    function stopCurrentPlayback() {
+      if (currentSource) {
+        try {
+          currentSource.stop()
+        } catch (error) {
+          console.warn('Error stopping current source:', error)
+        }
+        currentSource = null
+        currentPlaybackId = null
+        isPaused = false
+        pausedAt = 0
+        startOffset = 0
+      }
+    }
+
+    /**
+     * Play audio buffer
+     */
+    async function playAudio(audioData, sampleRate, numberOfChannels, playbackId, options = {}) {
+      try {
+        // Stop previous audio (AC3: stop previous audio behavior)
+        stopCurrentPlayback()
+
+        // Initialize audio context if needed
+        initAudioContext()
+
+        // Resume AudioContext if suspended
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume()
+          console.log('AudioContext resumed')
+        }
+
+        // Reconstruct AudioBuffer from raw data
+        const audioBuffer = reconstructAudioBuffer(audioData, sampleRate, numberOfChannels)
+
+        // Create buffer source
+        currentSource = audioContext.createBufferSource()
+        currentSource.buffer = audioBuffer
+        currentPlaybackId = playbackId
+
+        // Apply playback options
+        if (options.speed) {
+          currentSource.playbackRate.value = options.speed
+        }
+
+        // Connect to destination (with optional volume control)
+        if (options.volume !== undefined) {
+          const gainNode = audioContext.createGain()
+          gainNode.gain.value = options.volume
+          currentSource.connect(gainNode)
+          gainNode.connect(audioContext.destination)
+        } else {
+          currentSource.connect(audioContext.destination)
+        }
+
+        // Send playback started message
+        chrome.runtime.sendMessage({
+          type: 'offscreen-audio-event',
+          event: 'started',
+          playbackId,
+          timestamp: Date.now(),
+          duration: audioBuffer.duration
+        })
+
+        // Handle playback completion
+        currentSource.onended = () => {
+          // Only send completed if this is still the current playback
+          if (currentPlaybackId === playbackId && !isPaused) {
+            chrome.runtime.sendMessage({
+              type: 'offscreen-audio-event',
+              event: 'completed',
+              playbackId,
+              timestamp: Date.now()
+            })
+
+            currentSource = null
+            currentPlaybackId = null
+          }
+        }
+
+        // Start playback
+        currentSource.start()
+        console.log('Audio playback started:', playbackId)
+
+        return { success: true, duration: audioBuffer.duration }
+      } catch (error) {
+        console.error('Playback error:', error)
+
+        chrome.runtime.sendMessage({
+          type: 'offscreen-audio-event',
+          event: 'error',
+          playbackId,
+          error: error.message,
+          timestamp: Date.now()
+        })
+
+        return { success: false, error: error.message }
+      }
+    }
+
+    /**
+     * Pause current playback
+     */
+    function pauseAudio() {
+      if (currentSource && !isPaused) {
+        pausedAt = audioContext.currentTime - startOffset
+        stopCurrentPlayback()
+        isPaused = true
+
+        chrome.runtime.sendMessage({
+          type: 'offscreen-audio-event',
+          event: 'paused',
+          playbackId: currentPlaybackId,
+          timestamp: Date.now(),
+          position: pausedAt
+        })
+      }
+    }
+
+    /**
+     * Resume paused playback
+     */
+    function resumeAudio() {
+      // Note: True resume requires storing the buffer, which we don't do in simple implementation
+      // This is a placeholder for future enhancement
+      console.warn('Resume not fully implemented yet')
+    }
+
+    /**
+     * Stop playback
+     */
+    function stopAudio() {
+      stopCurrentPlayback()
+
+      chrome.runtime.sendMessage({
+        type: 'offscreen-audio-event',
+        event: 'stopped',
+        timestamp: Date.now()
+      })
+    }
+
+    /**
+     * Get playback state
+     */
+    function getPlaybackState() {
+      return {
+        status: currentSource ? (isPaused ? 'paused' : 'playing') : 'idle',
+        currentPlaybackId,
+        position: audioContext ? audioContext.currentTime - startOffset : 0
+      }
+    }
+
+    /**
+     * Message listener
+     */
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      console.log('Offscreen received message:', message.type)
+
+      switch (message.type) {
+        case 'offscreen-audio-play':
+          playAudio(
+            message.audioData,
+            message.sampleRate,
+            message.numberOfChannels,
+            message.playbackId,
+            message.options
+          ).then(result => {
+            sendResponse(result)
+          })
+          return true // Async response
+
+        case 'offscreen-audio-pause':
+          pauseAudio()
+          sendResponse({ success: true })
+          break
+
+        case 'offscreen-audio-resume':
+          resumeAudio()
+          sendResponse({ success: true })
+          break
+
+        case 'offscreen-audio-stop':
+          stopAudio()
+          sendResponse({ success: true })
+          break
+
+        case 'offscreen-audio-state':
+          sendResponse(getPlaybackState())
+          break
+
+        default:
+          console.warn('Unknown message type:', message.type)
+          sendResponse({ success: false, error: 'Unknown message type' })
+      }
+    })
+
+    // Initialize on load
+    console.log('Offscreen audio document loaded')
+  </script>
+</body>
+</html>

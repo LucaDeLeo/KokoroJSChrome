@@ -1,0 +1,15 @@
+{
+  "name": "kokorojs-test-plugin",
+  "version": "1.0.0",
+  "description": "Test plugin for KokoroJS Chrome Extension",
+  "main": "index.js",
+  "type": "module",
+  "plugin": {
+    "id": "test-plugin",
+    "name": "Test Plugin",
+    "description": "Simple test plugin for verification",
+    "author": "KokoroJS Team",
+    "dependencies": [],
+    "optional": false
+  }
+}
