@@ -79,23 +79,62 @@ function setupMessageHandlers() {
 }
 
 function setupContextMenus() {
-  chrome.contextMenus.create({
-    id: 'kokoro-tts',
-    title: 'Read with KokoroJS',
-    contexts: ['selection']
-  })
+  try {
+    // Create "Speak selection" menu item (visible when text selected)
+    chrome.contextMenus.create({
+      id: 'kokoro-tts-speak-selection',
+      title: 'Speak selection',
+      contexts: ['selection']
+    }, () => {
+      if (chrome.runtime.lastError) {
+        logger.error('Failed to create "Speak selection" context menu:', chrome.runtime.lastError)
+      } else {
+        logger.info('"Speak selection" context menu created successfully')
+      }
+    })
 
-  chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === 'kokoro-tts' && info.selectionText) {
-      chrome.tabs.sendMessage(tab.id, {
-        type: 'tts:request',
-        request: {
-          text: info.selectionText,
-          source: 'context-menu'
+    // Create "Read page" menu item (always visible)
+    chrome.contextMenus.create({
+      id: 'kokoro-tts-read-page',
+      title: 'Read page',
+      contexts: ['page']
+    }, () => {
+      if (chrome.runtime.lastError) {
+        logger.error('Failed to create "Read page" context menu:', chrome.runtime.lastError)
+      } else {
+        logger.info('"Read page" context menu created successfully')
+      }
+    })
+
+    chrome.contextMenus.onClicked.addListener((info, tab) => {
+      try {
+        if (info.menuItemId === 'kokoro-tts-speak-selection' && info.selectionText) {
+          // Send message to content script to handle selection
+          chrome.tabs.sendMessage(tab.id, {
+            type: 'TTS_REQUEST',
+            action: 'speak-selection',
+            text: info.selectionText,
+            source: 'context-menu'
+          }).catch(error => {
+            logger.error('Failed to send speak-selection message to content script:', error)
+          })
+        } else if (info.menuItemId === 'kokoro-tts-read-page') {
+          // Send message to content script to handle page reading
+          chrome.tabs.sendMessage(tab.id, {
+            type: 'TTS_REQUEST',
+            action: 'read-page',
+            source: 'context-menu'
+          }).catch(error => {
+            logger.error('Failed to send read-page message to content script:', error)
+          })
         }
-      })
-    }
-  })
+      } catch (error) {
+        logger.error('Error handling context menu click:', error)
+      }
+    })
+  } catch (error) {
+    logger.error('Failed to setup context menus:', error)
+  }
 }
 
 async function handleTTSRequest(message, sender, sendResponse) {

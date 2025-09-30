@@ -1,0 +1,16 @@
+{
+  "name": "kokorojs-ui-renderer",
+  "version": "1.0.0",
+  "description": "UI Renderer plugin for KokoroJS Chrome Extension - Shadow DOM UI components",
+  "main": "index.js",
+  "type": "module",
+  "plugin": {
+    "id": "ui-renderer",
+    "name": "UI Renderer",
+    "stage": "ui",
+    "description": "Renders floating button, progress bar, and control panel with Shadow DOM isolation",
+    "author": "KokoroJS Team",
+    "dependencies": [],
+    "optional": false
+  }
+}

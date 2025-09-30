@@ -42,7 +42,11 @@
       "enabled": true,
       "dependencies": [],
       "config": {
-        "theme": "light"
+        "defaultTheme": "default",
+        "defaultSize": "medium",
+        "buttonAutoHideDelay": 10000,
+        "progressAutoHideDelay": 2000,
+        "enableAnimations": true
       }
     },
     {
@@ -53,7 +57,10 @@
       "enabled": true,
       "dependencies": [],
       "config": {
-        "maxQueueSize": 100
+        "maxQueueSize": 10,
+        "stopPrevious": true,
+        "sessionTimeout": 300000,
+        "persistState": true
       }
     },
     {

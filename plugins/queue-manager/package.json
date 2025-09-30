@@ -1,0 +1,16 @@
+{
+  "name": "kokorojs-queue-manager",
+  "version": "1.0.0",
+  "description": "Queue Manager plugin for KokoroJS Chrome Extension - Stop previous audio behavior",
+  "main": "index.js",
+  "type": "module",
+  "plugin": {
+    "id": "queue-manager",
+    "name": "Queue Manager",
+    "stage": "queue",
+    "description": "Manages TTS request queue with stop previous behavior to prevent concurrent audio",
+    "author": "KokoroJS Team",
+    "dependencies": [],
+    "optional": false
+  }
+}
