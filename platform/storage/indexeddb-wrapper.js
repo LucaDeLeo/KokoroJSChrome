@@ -19,6 +19,8 @@ class IndexedDBWrapper {
   constructor() {
     this.db = null
     this.initPromise = null
+    this.cleanupInterval = null
+    this.CLEANUP_INTERVAL_MS = 10 * 60 * 1000 // 10 minutes
   }
 
   /**
@@ -43,6 +45,7 @@ class IndexedDBWrapper {
 
       request.onsuccess = () => {
         this.db = request.result
+        this._startCleanupInterval()
         resolve(this.db)
       }
 
@@ -248,6 +251,22 @@ class IndexedDBWrapper {
   }
 
   /**
+   * Store large text in cache for cross-context transport (convenience method)
+   * @param {Object} data - Text cache data
+   * @param {string} data.text - Text content
+   * @param {number} data.tabId - Tab identifier
+   * @param {number} [data.timestamp] - Optional timestamp (defaults to now)
+   * @param {number} [data.size] - Optional size metadata
+   * @param {boolean} [data.extracted] - Optional extraction metadata
+   * @returns {Promise<string>} - Returns the generated cacheId
+   */
+  async storeText(data) {
+    const cacheId = `text-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`
+    await this.storeTextCache(cacheId, data.text, data.tabId)
+    return cacheId
+  }
+
+  /**
    * Store large text in cache for cross-context transport
    * @param {string} cacheId - Cache identifier
    * @param {string} text - Text content
@@ -276,6 +295,16 @@ class IndexedDBWrapper {
     } catch (error) {
       throw new Error(`Failed to store text cache ${cacheId}: ${error.message}`)
     }
+  }
+
+  /**
+   * Load text from cache (convenience method)
+   * @param {string} cacheId - Cache identifier
+   * @returns {Promise<Object|null>} - Returns cache data object
+   */
+  async getText(cacheId) {
+    const text = await this.loadTextCache(cacheId)
+    return text ? { text } : null
   }
 
   /**
@@ -390,9 +419,50 @@ class IndexedDBWrapper {
   }
 
   /**
+   * Start automatic cleanup interval for TextCache
+   * @private
+   */
+  _startCleanupInterval() {
+    // Clear any existing interval
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval)
+    }
+
+    // Run cleanup immediately
+    this.cleanupTextCache().catch(err => {
+      console.error('Initial text cache cleanup failed:', err)
+    })
+
+    // Set up periodic cleanup (every 10 minutes)
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupTextCache()
+        .then(count => {
+          if (count > 0) {
+            console.log(`Cleaned up ${count} old text cache entries`)
+          }
+        })
+        .catch(err => {
+          console.error('Periodic text cache cleanup failed:', err)
+        })
+    }, this.CLEANUP_INTERVAL_MS)
+  }
+
+  /**
+   * Stop automatic cleanup interval
+   * @private
+   */
+  _stopCleanupInterval() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval)
+      this.cleanupInterval = null
+    }
+  }
+
+  /**
    * Close database connection
    */
   close() {
+    this._stopCleanupInterval()
     if (this.db) {
       this.db.close()
       this.db = null
